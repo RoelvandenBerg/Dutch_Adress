@@ -2,9 +2,24 @@
 '''
 Created on 9 jan. 2015
 
-@author: Roel van den Berg
+@author: Roel van den Berg, https://nl.linkedin.com/in/roelberg
 
-header postcode_NL.csv:
+Address takes in a source .csv with all Dutch Adresses. It's main goal is to search 
+adresses in a string (for example a tweet) and return the found addresses and its
+x- and y-coordinates in the Dutch RD coordinate system.
+
+It comprises of a few helper functions and several classes:
+Address = an adress with RD-coordinates and the string that contains the address
+PostalCode = PostalCode.codes contains a dict that helps find an address (city & street)
+HouseNumber = contains x-, y-RDcoordinates for ranges of housenumbers 
+Street = street contains the housenumbers that falls within the street
+City = contains the streets for a given (Dutch) city
+AddressBook = Adress book with all adresses found in the source file
+AddressSearch = search class that tries to find an address based on a given string
+
+Dutch Addresses data-file can be found at: http://www.postcodedata.nl/download/
+
+header postcode_NL.csv (inc. example):
 0      id               395614
 1      postcode         7940XX
 2      postcode_id      79408888
@@ -28,8 +43,8 @@ header postcode_NL.csv:
 20     changed_date     2014-04-10 13:20:28
 
 Thus:
-min = 5
-max = 6
+minnumber = 5
+maxnumber = 6
 type = 7
 x = 17
 y = 18
