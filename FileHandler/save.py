@@ -46,6 +46,10 @@ def save(filename, content, encoding=None, verbose=True, dim=1, end="\n", sep=";
 
 
 def check_ext(filename, ext):
+    '''
+    Checks wether a filename contains a given extention and appends it if 
+    it lacks. 
+    '''
     if ext[0] != ".":
         ext = "." + ext
     if filename[-1*len(ext):] != ext:
@@ -54,11 +58,16 @@ def check_ext(filename, ext):
    
  
 def csv(filename, content, encoding=None, verbose=True, sep=";", ext="csv"):
+    'Filehander.save.save wrapper function that saves a list in a .csv format'
     filename = check_ext(filename, ext)
     save(filename, content, encoding, verbose, 2, "\n", sep)
 
 
 def txt(filename, content, encoding=None, verbose=True, tabs=False, ext="txt"):
+    '''
+    Filehander.save.save wrapper function that saves a list in a .txt format.
+    Checks for tabs
+    '''
     filename = check_ext(filename, ext)
     if not tabs:
         save(filename, content, encoding, verbose, 1, "\n")
@@ -67,4 +76,8 @@ def txt(filename, content, encoding=None, verbose=True, tabs=False, ext="txt"):
 
 
 def string(filename, content, encoding=None, verbose=True):
+    '''
+    Filehander.save.save wrapper function that saves a string to file without
+    checking extentions
+    '''
     save(filename, content, encoding, verbose, dim=0)
