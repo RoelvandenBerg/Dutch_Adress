@@ -4,17 +4,17 @@ Created on 9 jan. 2015
 
 @author: Roel van den Berg, https://nl.linkedin.com/in/roelberg
 
-Address takes in a source .csv with all Dutch Adresses. It's main goal is to search 
-adresses in a string (for example a tweet) and return the found addresses and its
+Address takes in a source .csv with all Dutch Addresses. It's main goal is to search 
+addresses in a string (for example a tweet) and return the found addresses and its
 x- and y-coordinates in the Dutch RD coordinate system.
 
 It comprises of a few helper functions and several classes:
-Address = an adress with RD-coordinates and the string that contains the address
+Address = an address with RD-coordinates and the string that contains the address
 PostalCode = PostalCode.codes contains a dict that helps find an address (city & street)
 HouseNumber = contains x-, y-RDcoordinates for ranges of housenumbers 
 Street = street contains the housenumbers that falls within the street
 City = contains the streets for a given (Dutch) city
-AddressBook = Adress book with all adresses found in the source file
+AddressBook = Address book with all addresses found in the source file
 AddressSearch = search class that tries to find an address based on a given string
 
 Dutch Addresses data-file can be found at: http://www.postcodedata.nl/download/
@@ -65,15 +65,6 @@ FILE_NAME = "postcode_NL.csv"
 
 dirlist = load.dirlist()
 
-
-def smallest_dist(h, *housenumbers):
-    '''
-    looks for the housnumberrange closest to the housenumber that is sought
-    '''
-    minmax = {x:min(abs(x.min-h), abs(x.max-h)) for x in housenumbers}
-    return min(minmax, key=minmax.get)
-
-
 def strip_accents(s):
     '''
     removes all encoding from string 's' except for Nonspacing_Mark: http://www.unicode.org/reports/tr44/#GC_Values_Table
@@ -96,7 +87,7 @@ def infmax(l):
     except ValueError:
         return float('inf')
 
-###HIER FIXEN#####
+
 def load_address_book():
     """
     Tries to load the pickled address file from the data directory. In case this fails it tries 
@@ -156,6 +147,7 @@ class Address(object):
 
 class PostalCode(object):
     'Object with all Dutch postal codes (under ".codes")'
+    
     def __init__(self, addressfile=None):
         if not addressfile:
             addressfile = load_address_file()
@@ -169,10 +161,10 @@ class HouseNumber(object):
     real housenumbers of one of three types:
     - even
     - odd
-    - mixed
+    - mixed (both odd and even combined)
     
     The match(housn) method checks whether a housnumber falls within 
-    its range. 
+    its own range. 
     """
     
     def __init__(self, min_housen, max_housen, numbertype, x, y):
@@ -189,10 +181,12 @@ class HouseNumber(object):
         0 = housen falls within range
         1 = housen is greater than the max of the range
         -1 = housen is smaller than the min of the range 
+        9 = either the housenumber in the addressfile lacks the type (ODD, EVEN, or mixed) 
+            of the housenumber to be matched, or the number found wasn't a housenumber. 
+            Either way the housenumber should be turned into 0
         '''
         if self.type != "MIXED" and self.type != even(housen):
-            return 0
-            #raise AddressTypeError("Self type: '%s' does not match other: '%s'" %(self.type, even(housen)))
+            return 9
         if self.min <= housen <= self.max:
             return 0
         elif housen < self.min:
@@ -207,6 +201,17 @@ class HouseNumber(object):
 
 
 class Street(object):
+    '''
+    A Street contains housenumbers and the lowest and highest 
+    housenumber (min and max). Like housenumbers streets can
+    contain housenumbers of three types:
+    - even
+    - odd
+    - mixed (both odd and even are found in one housenumber range)
+    including an extra:
+    - multi (housenumbers with more than one of the above types 
+      are found.
+    '''
     
     def __init__(self, name):
         self.name = name
@@ -217,6 +222,7 @@ class Street(object):
         self.type = None
    
     def add(self, housenumber):
+        'adds housenumber to street and updates other attributes'
         self.housenumbers.append(housenumber)
         self.housenumbers.sort(key=lambda x: x.min)
         self.min = self.housenumbers[0].min
@@ -226,57 +232,88 @@ class Street(object):
         if not self.type:
             self.type = housenumber.type
         elif self.type != housenumber.type:
-            self.type = "multi"
+            self.type = "multi" 
     
     def find(self, housen=0):
+        '''
+        Finds RD coordinate for a given housenumber. When no housenumber
+        is given, defaults to zero and returns the location of the housenumber
+        halfway the street, rounding down. 
+        '''
         if housen == 0:
-            housenumber = self.housenumbers[int(self.len/2)]
-            return housenumber.x, housenumber.y
-        elif self.type == "multi":
+            return self.get_halfway()
+        # when a housenumber is given and the street matches different types, find x, y
+        # based on that side of the street (and on mixed types)
+        elif self.type == "multi":   
             housenumbers = [x for x in self.housenumbers if x.type == "MIXED" or x.type == even(housen)]
             length = len(housenumbers)
             return self.find_RD_coord(housen, housenumbers, length)
-        else:
+        else: # all housenumber types are of the same type
             return self.find_RD_coord(housen, self.housenumbers, self.len)        
-  
+    
+    def get_halfway(self):
+        '''
+        No housenumber was given thus return the x, y pair 
+        for the housenumber halfway down the street
+        '''
+        housenumber = self.housenumbers[int(self.len/2)] 
+        return housenumber.x, housenumber.y     
+
     def find_RD_coord(self, housen, housenumbers, length):
+        'returns x and y on a match, else searches up or down the set of housenumbers'
         halfway = int(length/2)
         match = housenumbers[halfway].match(housen)
+        if match == 9: # housenumber is incorrect thus return x, y halfway the the street
+            return self.gethalfway()
         try:
             if match == 0:
                 return housenumbers[halfway].x, housenumbers[halfway].y
-            elif len(housenumbers) == 1:
-                h = housenumbers[0]
-                housenos = [x for x in self.housenumbers if x.match_even_type(housen)]
-                i = housenos.index(h)
-                try:
-                    fit = smallest_dist(housen, h, housenos[i-1], housenos[i+1])
-                except IndexError:
-                    try: 
-                        fit = smallest_dist(housen, h, housenos[i-1])
-                    except IndexError:
-                        fit = smallest_dist(housen, h)
-                print('Bij straat: "%s", is bij het gezochte huisnr %d de dichtsbijzijnde range: %d-%d uit het adresboek.' %(self.name, housen, fit.min, fit.max))
-                return fit.x, fit.y
+            elif len(housenumbers) == 1: # housenumber falls without the range in housenumbers
+                return self.find_closest_RD(housenumbers, housen) 
             elif match == 1:
                 return self.find_RD_coord(housen, housenumbers[halfway:], length - halfway)
             else:
                 return self.find_RD_coord(housen, housenumbers[:halfway], halfway)
         except RuntimeError:
-            print(housen, ["-".join([str(x.min), str(x.max)]) for x in  housenumbers], ["-".join([str(x.min), str(x.max)]) for x in self.housenumbers], length)
-            exit()
-            
+            raise Exception(housen, ["-".join([str(x.min), str(x.max)]) for x in  housenumbers], ["-".join([str(x.min), str(x.max)]) for x in self.housenumbers], length)
+ 
+    def find_closest_RD(self, housenumbers, housen):
+        'finds closest housenumberrange and return its x and y coordinate'
+        h = housenumbers[0]
+        housenos = [x for x in self.housenumbers if x.match_even_type(housen)]
+        i = housenos.index(h)
+        try:
+            fit = self.smallest_dist(housen, h, housenos[i-1], housenos[i+1])
+        except IndexError:
+            try: 
+                fit = self.smallest_dist(housen, h, housenos[i-1])
+            except IndexError:
+                fit = self.smallest_dist(housen, h)
+        print('Bij straat: "%s", is bij het gezochte huisnr %d de dichtsbijzijnde range: %d-%d uit het adresboek.' %(self.name, housen, fit.min, fit.max))
+        return fit.x, fit.y
+    
+    def smallest_dist(self, h, *housenumbers):
+        'looks for the housnumberrange closest to the housenumber that is sought'
+        minmax = {x:min(abs(x.min-h), abs(x.max-h)) for x in housenumbers}
+        return min(minmax, key=minmax.get)
+
+
 
 class City(object):
-    
+    '''
+    Contains streets, uses find with a street and a housenumber to find the 
+    x-, y-coordinate. Add adds streets and housenumbers.  
+    '''
     def __init__(self, name):
         self.name = name
         self.streets = {}
 
     def find(self, street, housen=0):
+        'find the x-, y-coordinate of a given street and housenumber'
         return self.streets[street].find(housen)
    
     def add(self, street, housenumber):
+        'adds streets and housenumbers'
         try:
             self.streets[street].add(housenumber)
         except KeyError:
@@ -338,16 +375,14 @@ class AddressSearch(object):
     
     def __init__(self, address_string='', address_book=None):
         self.error_log = []
-        if not address_book:
-            self.address_book = load_address_book()
-        else:
+        if address_book:
             self.address_book = address_book
+        else:
+            self.address_book = load_address_book()
         self.address_string = address_string.upper()
         self.cities = list(self.address_book.cities.keys())
         self.alternate_cities =  list(self.address_book.alternate_cities.keys())
-        self.x, self.y = [], []
-        self.city, self.street, self.housenumber = [], [], []
-        self.addresses = []
+        self.reset()
 
     def find_RD_coord(self, NA="NA"):
         try:
@@ -361,9 +396,8 @@ class AddressSearch(object):
             self.addresses = [Address(NA, NA, NA, NA, NA, self.address_string)]
             
     def reset(self):
-        self.x, self.y = [], []
+        self.x, self.y, self.addresses = [], [], []
         self.city, self.street, self.housenumber = [], [], []
-        self.addresses = []
 
     def find(self, address_string = None):
         if address_string:
@@ -466,20 +500,19 @@ class DownloadAndPickle(object):
         print('Pickle saved.')
         
     def unpickle(self):
-        return pickle.load(open(os.path.join(dirlist["data"], "adressenbestand.p"), 'rb'))
+        print('Retrieving addres book from pickle...')
+        addressbook = pickle.load(open(os.path.join(dirlist["data"], "adressenbestand.p"), 'rb'))
+        print('Address book retrieved.')
+        return addressbook
 
 
 if __name__ == '__main__':
     antwoord = "geen"
     ja = ['yes', 'ja', 'y', 'j']
     nee = ['no', 'n', 'nee']
-    
+     
     while not any([antwoord in x for x in ja + nee]):
         antwoord = input('Weet je zeker dat je {} wilt downloaden? (beantwoord met ja of nee): '.format(DATA_URL))
-
+ 
     if antwoord in ja:
         dl = DownloadAndPickle('dl', 's', 'p')
-    
-    zoek = AddressSearch(dl.address_book)
-    zoek.find('Op 18 april 2015 om 09:32 is de brandweer met gepaste spoed uitgereden naar Simplonbaan 139 te Utrecht.')
-    print(zoek)
