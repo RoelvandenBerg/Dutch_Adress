@@ -5,6 +5,7 @@ Examples:
 
 ```
 import address
+
 zoek = address.AddressSearch("PRIO 2 TS223 KRUISPLEIN 26 ROTTERDAM WATEROVERLAST VAK: 5991200")
 # address.AddressSearch will automatically download the necessary files and pickle them (= c.a. 250 MB)
 
